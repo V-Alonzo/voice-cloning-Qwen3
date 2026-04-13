@@ -1,37 +1,48 @@
-# Actividad de Clonación de Voz con Qwen-3 TTS
+# Actividad de Clonacion de Voz con Qwen-3 TTS
 
-## Descripción del proyecto
-Este proyecto implementa una aplicación interactiva para clonar una voz y sintetizar texto usando el modelo **Qwen3-TTS**.
+## Descripcion del proyecto
+Este proyecto implementa una aplicacion interactiva en Gradio para:
 
-El flujo principal es descrito por lo siguiente:
+1. Clonar una voz a partir de un audio de referencia.
+2. Sintetizar texto con la voz clonada.
+3. Cargar contexto desde un PDF y datos de una persona.
+4. Chatear con un agente que responde en texto y, cuando es posible, tambien en audio sintetizado.
 
-- Subir un audio base con la voz que se quiere clonar.
-- Escribir la transcripción del audio base.
-- Cargar el modelo de clonación.
-- Escribir un texto nuevo para sintetizarlo con la voz clonada.
-- Escuchar el resultado generado en formato de audio.
+La interfaz vive en `main.py` y la logica se divide principalmente entre:
 
-La interfaz está construida con **Gradio**, mientras que la lógica de clonación e inferencia se implementa en Python con **PyTorch** y **qwen_tts**.
+- `voiceClonning.py`: clonacion e inferencia de voz.
+- `informationExtraction.py`: carga de contexto, generacion de respuestas por LLM y evaluacion.
+- `inputsGenerator.py`: componentes de entrada para la UI.
 
----
+## Funcionalidades actuales
+- Flujo guiado en 5 pasos con pestañas.
+- Clonacion de voz usando audio + transcripcion base.
+- Sintesis de texto a voz desde UI.
+- Carga de PDF, nombre y resumen para contextualizar un agente conversacional.
+- Chat con respuestas en:
+  - texto (siempre), y
+  - audio (si la inferencia de voz se genera correctamente).
+- Manejo de fallback: si la sintesis falla en el chat, se devuelve solo texto.
 
-## Objetivo de la actividad
-### Objetivo general
-Desarrollar una solución práctica de clonación de voz que permita comprender un flujo completo de IA generativa de audio: entrada de referencia, creación de prompt de voz clonada e inferencia de texto a voz.
+## Flujo de uso (UI)
+1. **Step 1**: subir audio base (`.wav`, `.mp3`, etc.).
+2. **Step 2**: ingresar transcripcion del audio base.
+3. **Step 3**:
+   - clic en **Load Model** para preparar la voz clonada.
+   - escribir texto en **Text to Synthesize**.
+   - clic en **Synthesize Cloned Voice** para escuchar el resultado.
+4. **Step 4**: 
+   - Subir PDF del que se podrá extraer información.
+   - Ingresar `Person Name` (nombre del agente) y `Person Summary` (quién es el agente). 
+5. **Step 5**:
+   - clic en **Load Chat** para inicializar el contexto del agente.
+   - conversar en el chat.
 
-### Objetivos específicos
-- Integrar un modelo de TTS/clonación de voz en una app local.
-- Aplicar un flujo guiado en 3 pasos para reducir errores de uso.
-- Permitir la aceleración por hardware cuando exista una GPU compatible (CUDA o MPS en Apple Silicon).
-- Generar y reproducir un archivo de salida de audio (`synthesized_audio.wav`).
-
----
-
-## Requisitos técnicos
+## Requisitos
 ### Entorno
 - Python 3.10+
 - pip actualizado
-- Conexión a internet para descargar el modelo en la primera ejecución
+- Conexion a internet para descarga de modelos y uso de APIs
 
 ### Dependencias principales
 - gradio
@@ -39,56 +50,42 @@ Desarrollar una solución práctica de clonación de voz que permita comprender 
 - soundfile
 - qwen_tts
 - accelerate
+- python-dotenv
+- openai
+- pypdf
+- pydantic
 
-Instalación sugerida:
+Instalacion sugerida:
 
 ```bash
 pip install -U pip
-pip install gradio torch soundfile qwen_tts accelerate
+pip install gradio torch soundfile qwen_tts accelerate python-dotenv openai pypdf pydantic
 ```
 
-### Aceleración por GPU
-El proyecto selecciona automáticamente el mejor dispositivo disponible:
+## Variables de entorno
+Configura un archivo `.env` en la raiz del proyecto con al menos:
 
-1. `mps` para Apple Silicon (Mac M1/M2/M3/M4)
-2. `cuda` para NVIDIA
-3. `cpu` como fallback
+- `OPENAI_API_KEY`: clave para llamadas OpenAI usadas en `informationExtraction.py`.
+- `GEMINI_API_KEY`: clave para evaluacion via endpoint compatible en Gemini.
+- `SYSTEM_PROMPT`: plantilla del prompt del agente. Debe incluir los placeholders:
+  - `{nombre}`
+  - `{resumen}`
+  - `{perfil}`
 
-En macOS con Apple Silicon, verifica que PyTorch detecte MPS:
+Ejemplo minimo:
 
-```bash
-python -c "import torch; print(torch.backends.mps.is_available())"
+```env
+OPENAI_API_KEY=tu_clave_openai
+GEMINI_API_KEY=tu_clave_gemini
+SYSTEM_PROMPT=Eres {nombre}. Usa este resumen: {resumen}. Usa este perfil: {perfil}.
 ```
 
----
-
-## Uso y personalización
-### 1) Ejecutar la aplicación
-En la carpeta raíz del proyecto:
+## Ejecucion
+Desde la carpeta raiz:
 
 ```bash
 python main.py
 ```
 
-Luego abre en el navegador la URL local que imprime Gradio (normalmente `http://127.0.0.1:7860`).
+Luego abre la URL local que imprime Gradio (normalmente `http://127.0.0.1:7860`).
 
-### 2) Flujo de uso
-1. **Step 1**: subir audio base (`.wav`, `.mp3`, etc.).
-2. **Step 2**: ingresar transcripción del audio base.
-3. **Step 3**:
-   - presionar **Load Model** para crear el prompt de voz clonada.
-   - escribir el texto a sintetizar.
-   - presionar **Synthesize Cloned Voice**.
-
-La salida se guarda como `synthesized_audio.wav` y se reproduce en la interfaz.
-
-### 3) Personalización rápida
-- Texto por defecto a sintetizar: editar `defaultTextToSynthesize` en `main.py`.
-- Idioma de inferencia: cambiar el parámetro `language` en `performVoiceInference` dentro de `voiceClonning.py`.
-- Etiquetas de interfaz y placeholders: editar `inputsGenerator.py` y `main.py`.
-- Nombre/ruta de audio de salida: editar la llamada a `sf.write(...)` en `voiceClonning.py`.
-
-### 4) Recomendaciones
-- Usar archivos de audio base limpios y con poco ruido para mejores resultados.
-- Mantener una transcripción fiel al audio de referencia.
-- Si se usa CPU, considerar textos cortos para reducir tiempo de inferencia.
