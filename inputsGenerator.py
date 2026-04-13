@@ -1,10 +1,10 @@
 import gradio as gr
 
-def generateMultilineTextInput(onUploadFunction):
+def generateMultilineTextInput(onUploadFunction, label):
     text_input = gr.Textbox(
         lines = 5,
         placeholder = "Enter text here...",
-        label = "Base Audio Transcription",
+        label = label,
     )
 
     if onUploadFunction:
@@ -19,3 +19,11 @@ def generateAudioInput(onUploadFunction):
         audio_input.change(fn = onUploadFunction, inputs = [audio_input], outputs = [])
 
     return audio_input
+
+def generatePDFInput(onUploadFunction):
+    pdf_input = gr.File(file_types = [".pdf"])
+
+    if onUploadFunction:
+        pdf_input.change(fn = onUploadFunction, inputs = [pdf_input], outputs = [])
+
+    return pdf_input

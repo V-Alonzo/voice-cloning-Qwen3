@@ -2,14 +2,63 @@ import soundfile as sf
 import gradio as gr
 import inputsGenerator
 import voiceClonning
+import os
+from informationExtraction import chatGeneration, initialConfiguration
+from dotenv import load_dotenv
+from gradio import ChatMessage
 
 global baseAudio
 global baseAudioTranscription
 
+pdfFile = None
+messagesHistory = []
 baseAudio = None
 baseAudioTranscription = None
 outputAudioPath = None
+personName = ""
+personSummary = ""
+textHistory = []
 defaultTextToSynthesize = "Esto es lo que sucede cuando clonas una voz utilizando Inteligencia Artificial. Es sorprendente, ¿No te parece?"
+
+load_dotenv(dotenv_path=".env", override=True)
+
+def processChatMessages(mensaje, historial):
+    global textHistory
+
+    response = chatGeneration(mensaje, textHistory)
+
+    try:
+        audio_response = voiceClonning.performVoiceInference(response)
+    except Exception as e:
+        print(f"Error during voice inference: {e}")
+        audio_response = None
+
+    if(audio_response is None):
+        return ChatMessage(role="assistant", content=response)
+    
+    return [ChatMessage(role="assistant", content=response), ChatMessage(role="assistant", content=gr.Audio(value=audio_response))]
+
+def processName(name):
+    global personName
+    personName = name
+    print(f"Person name: {personName}")
+    return name
+
+def processPersonSummary(summary):
+    global personSummary
+    personSummary = summary
+    print(f"Person summary: {personSummary}")
+    return summary
+
+def processPDF(file):
+    global pdfFile
+
+    if file is None:
+        return "No file uploaded."
+    
+    pdfFile = file.name
+    print(f"PDF file uploaded: {pdfFile}")
+    return file
 
 def processBaseAudio(filePath):
     global baseAudio
@@ -34,8 +83,6 @@ def performVoiceCloning():
 
     return "Voice cloning model loaded and clone prompt created."
 
-
-
 def generateStep1():
     with gr.Blocks() as step1:
         gr.Markdown("## Step 1: Upload Base Audio File")
@@ -46,7 +93,7 @@ def generateStep1():
 def generateStep2():
     with gr.Blocks() as step2:
         gr.Markdown("## Step 2: Base Audio Transcription")
-        multiLineTextInput = inputsGenerator.generateMultilineTextInput(onUploadFunction = lambda x: processBaseAudioTranscription(x))
+        multiLineTextInput = inputsGenerator.generateMultilineTextInput(onUploadFunction = lambda x: processBaseAudioTranscription(x), label = "Base Audio Transcription")
 
     return step2
 
@@ -74,8 +121,32 @@ def generateStep3():
 
     return step3
 
+def generateStep4():
+    with gr.Blocks() as step4:
+        gr.Markdown("## Step 4: Upload PDF File and Basic Information")
+        pdfInput = inputsGenerator.generatePDFInput(onUploadFunction = lambda x: processPDF(x))
+        personNameInput = inputsGenerator.generateMultilineTextInput(onUploadFunction = lambda x: processName(x), label = "Person Name")
+        personSummaryInput = inputsGenerator.generateMultilineTextInput(onUploadFunction = lambda x: processPersonSummary(x), label = "Person Summary")
 
-steps = [generateStep1, generateStep2, generateStep3]
+    return step4
+
+def generateStep5():
+    global pdfFile
+    global personName
+    global personSummary
+
+    with gr.Blocks() as step5:
+        gr.Markdown("## Step 5: Chat with the Cloned Voice Agent")
+        statusOutputChat = gr.Textbox(label = "Status", interactive = False)
+        loadChatButton = gr.Button("Load Chat")
+        loadChatButton.click(fn = lambda x: initialConfiguration(pdfFile, personSummary, personName), inputs = [], outputs = [statusOutputChat])
+        
+        gr.ChatInterface(processChatMessages)
+
+    return step5
+
+
+steps = [generateStep1, generateStep2, generateStep3, generateStep4, generateStep5]
 
 
 renderedStep = 0
