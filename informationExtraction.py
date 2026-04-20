@@ -57,11 +57,30 @@ def chatGeneration(message, history):
 def chatear (message, history):
     messages = [{"role":"system","content": systemPrompt}] + history + [{"role":"user","content": message}]
     response = openAiClient.chat.completions.create(model="gpt-4o-mini",messages = messages)
+
+    evaluation = evaluar(response, message, history)
+
+    while not evaluation.isAcceptable:
+        newSystemPrompt = rerun(response, feedback = evaluation.feedback)
+        messages = [{"role":"system","content": newSystemPrompt}] + history + [{"role":"user","content": message}]
+        
+        response = openAiClient.chat.completions.create(model="gpt-4o-mini",messages = messages)
+
     return response.choices[0].message.content 
 
 class Evaluacion(BaseModel):
     isAcceptable: bool
     feedback: str
+
+
+def rerun(response, feedback):
+    global systemPrompt
+
+    updatedSystemPrompt = systemPrompt + f"\n\n ## Respuesta anterior rechazada\nAcabas de intentar responder, pero el control de calidad rechazó tu respuesta\n"
+    updatedSystemPrompt += f"## Tu respuesta intentada: \n{response}\n\n"
+    updatedSystemPrompt += f"## Razón del rechazo: \n{feedback}\n\n"
+
+    return updatedSystemPrompt
 
 
 def prompt_usuario_evaluador(response, message, history):
