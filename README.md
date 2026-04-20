@@ -1,59 +1,68 @@
 # Actividad de Clonacion de Voz con Qwen-3 TTS
 
 ## Descripcion del proyecto
-Este proyecto implementa una aplicacion interactiva en Gradio para:
+Esta aplicacion en Gradio permite:
 
-1. Clonar una voz a partir de un audio de referencia.
+1. Clonar una voz a partir de un audio de referencia y su transcripcion.
 2. Sintetizar texto con la voz clonada.
-3. Cargar contexto desde un PDF y datos de una persona.
-4. Chatear con un agente que responde en texto y, cuando es posible, tambien en audio sintetizado.
+3. Cargar contexto desde un PDF y configurar una personalidad al agente.
+4. Chatear con un agente contextualizado.
+5. Generar respuestas en audio (opcional) y activar un modo de razonamiento iterativo (opcional).
 
-La interfaz vive en `main.py` y la logica se divide principalmente entre:
+La interfaz principal esta en `main.py` y la logica se divide en:
 
-- `voiceClonning.py`: clonacion e inferencia de voz.
-- `informationExtraction.py`: carga de contexto, generacion de respuestas por LLM y evaluacion.
-- `inputsGenerator.py`: componentes de entrada para la UI.
+- `voiceClonning.py`: clonacion de voz e inferencia TTS con Qwen.
+- `informationExtraction.py`: lectura de PDF, configuracion de prompts, generacion de respuestas y evaluacion iterativa.
+- `inputsGenerator.py`: componentes reutilizables para entradas de la UI.
+- `audioPlayer.py`: utilitario para reproductor de audio en Gradio.
 
-## Funcionalidades actuales
-- Flujo guiado en 5 pasos con pestañas.
-- Clonacion de voz usando audio + transcripcion base.
-- Sintesis de texto a voz desde UI.
-- Carga de PDF, nombre y resumen para contextualizar un agente conversacional.
-- Chat con respuestas en:
-  - texto (siempre), y
-  - audio (si la inferencia de voz se genera correctamente).
-- Manejo de fallback: si la sintesis falla en el chat, se devuelve solo texto.
+## Novedades incorporadas
+- Toggle **Generate with Voice Cloning** en el chat:
+   - activado: intenta generar audio de cada respuesta.
+   - desactivado: responde solo en texto.
+- Toggle **Activate Reasoning** en el chat:
+   - activado: la respuesta se evalua con un segundo modelo y se regenera hasta que sea aceptable.
+   - desactivado: genera una respuesta directa.
+- Flujo de fallback robusto:
+   - si falla la sintesis de voz, el chat no se rompe y entrega la respuesta en texto.
+- Seleccion automatica de dispositivo para inferencia:
+   - Apple Silicon (`mps`), CUDA (`cuda`) o CPU.
 
 ## Flujo de uso (UI)
 1. **Step 1**: subir audio base (`.wav`, `.mp3`, etc.).
-2. **Step 2**: ingresar transcripcion del audio base.
+2. **Step 2**: ingresar la transcripcion del audio base.
 3. **Step 3**:
-   - clic en **Load Model** para preparar la voz clonada.
-   - escribir texto en **Text to Synthesize**.
-   - clic en **Synthesize Cloned Voice** para escuchar el resultado.
-4. **Step 4**: 
-   - Subir PDF del que se podrá extraer información.
-   - Ingresar `Person Name` (nombre del agente) y `Person Summary` (quién es el agente). 
+    - clic en **Load Model** para preparar el prompt de voz clonada.
+    - escribir texto en **Text to Synthesize**.
+    - clic en **Synthesize Cloned Voice** para escuchar el resultado.
+4. **Step 4**:
+    - subir un PDF desde el que se extraera contexto.
+    - ingresar `Person Name` (nombre del agente/persona).
+    - ingresar `Person Summary` (resumen corto de la persona).
 5. **Step 5**:
-   - clic en **Load Chat** para inicializar el contexto del agente.
-   - conversar en el chat.
+    - clic en **Load Chat** para inicializar el sistema con el PDF y datos de la persona.
+    - configurar toggles de chat:
+       - **Generate with Voice Cloning**
+       - **Activate Reasoning**
+    - conversar en el chat.
 
 ## Requisitos
+
 ### Entorno
 - Python 3.10+
-- pip actualizado
-- Conexion a internet para descarga de modelos y uso de APIs
+- `pip` actualizado
+- Conexion a internet para descarga de modelos y llamadas a API
 
 ### Dependencias principales
-- gradio
-- torch
-- soundfile
-- qwen_tts
-- accelerate
-- python-dotenv
-- openai
-- pypdf
-- pydantic
+- `gradio`
+- `torch`
+- `soundfile`
+- `qwen_tts`
+- `accelerate`
+- `python-dotenv`
+- `openai`
+- `pypdf`
+- `pydantic`
 
 Instalacion sugerida:
 
@@ -63,29 +72,44 @@ pip install gradio torch soundfile qwen_tts accelerate python-dotenv openai pypd
 ```
 
 ## Variables de entorno
-Configura un archivo `.env` en la raiz del proyecto con al menos:
+Configura un archivo `.env` en la raiz del proyecto.
 
-- `OPENAI_API_KEY`: clave para llamadas OpenAI usadas en `informationExtraction.py`.
-- `GEMINI_API_KEY`: clave para evaluacion via endpoint compatible en Gemini.
-- `SYSTEM_PROMPT`: plantilla del prompt del agente. Debe incluir los placeholders:
-  - `{nombre}`
-  - `{resumen}`
-  - `{perfil}`
+Variables requeridas para generacion y evaluacion:
 
-Ejemplo minimo:
+- `OPENAI_API_KEY`: clave para generar respuestas del agente.
+- `GPT_MODEL`: modelo para generacion principal (ejemplo: `gpt-4o-mini`).
+- `GEMINI_API_KEY`: clave para el evaluador.
+- `GEMINI_BASE_URL`: URL base compatible con el endpoint de Gemini.
+- `GEMINI_MODEL`: modelo usado para evaluar calidad de la respuesta.
+- `SYSTEM_PROMPT`: prompt base del agente. Debe incluir:
+   - `{nombre}`
+   - `{resumen}`
+   - `{perfil}`
+
+Ejemplo:
 
 ```env
 OPENAI_API_KEY=tu_clave_openai
+GPT_MODEL=gpt-4o-mini
+
 GEMINI_API_KEY=tu_clave_gemini
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+GEMINI_MODEL=gemini-2.0-flash
+
 SYSTEM_PROMPT=Eres {nombre}. Usa este resumen: {resumen}. Usa este perfil: {perfil}.
 ```
 
 ## Ejecucion
-Desde la carpeta raiz:
+Desde la carpeta raiz del proyecto:
 
 ```bash
 python main.py
 ```
 
 Luego abre la URL local que imprime Gradio (normalmente `http://127.0.0.1:7860`).
+
+## Notas importantes
+- Antes de usar el chat, debes ejecutar **Load Chat** (Step 5).
+- Para generar audio en chat, primero debes haber cargado el modelo de voz en **Step 3**.
+- El archivo de salida de TTS se guarda como `synthesized_audio.wav` en la raiz del proyecto.
 
