@@ -13,6 +13,7 @@ global profile
 global name
 global systemPrompt
 global evaluatorSystemPrompt
+global gemini
 
 load_dotenv(dotenv_path=".env", override=True)
 systemPrompt = ""
@@ -24,10 +25,15 @@ def initialConfiguration(pdfFilePath, personSummary, personName):
     global name
     global systemPrompt
     global evaluatorSystemPrompt
+    global gemini
 
     name = personName
     openAiClient = OpenAI()
     summary = personSummary
+    gemini = OpenAI(
+        api_key= os.getenv("GEMINI_API_KEY"),
+        base_url = os.getenv("GEMINI_BASE_URL")
+    )
 
     print(f"PDF file path: {pdfFilePath}")
 
@@ -51,22 +57,40 @@ def initialConfiguration(pdfFilePath, personSummary, personName):
 
     return "Chat Initiated"
 
-def chatGeneration(message, history):
-    return chatear(message, history)
+def chatGeneration(message, history, reasoningActivated):
+    return chatear(message, history, reasoningActivated)
 
-def chatear (message, history):
+def chatear (message, history, reasoningActivated):
     messages = [{"role":"system","content": systemPrompt}] + history + [{"role":"user","content": message}]
-    response = openAiClient.chat.completions.create(model="gpt-4o-mini",messages = messages)
+    responses = []
+    response = openAiClient.chat.completions.create(model= os.getenv("GPT_MODEL"), messages = messages)
 
-    evaluation = evaluar(response, message, history)
+    if reasoningActivated:
+        evaluation = evaluar(response, message, history)
 
-    while not evaluation.isAcceptable:
-        newSystemPrompt = rerun(response, feedback = evaluation.feedback)
-        messages = [{"role":"system","content": newSystemPrompt}] + history + [{"role":"user","content": message}]
-        
-        response = openAiClient.chat.completions.create(model="gpt-4o-mini",messages = messages)
+        responses.append(f"----------Evaluando respuesta---------\n {response.choices[0].message.content}\n")
+        responses.append(f"----------Retroalimentación---------\n- {evaluation.feedback}\n")
 
-    return response.choices[0].message.content 
+        while not evaluation.isAcceptable:
+            responses.append(f"Generando nueva respuesta...")
+            newSystemPrompt = rerun(response, feedback = evaluation.feedback)
+            messages = [{"role":"system","content": newSystemPrompt}] + history + [{"role":"user","content": message}]
+            
+            response = openAiClient.chat.completions.create(model= os.getenv("GPT_MODEL"), messages = messages)
+
+            evaluation = evaluar(response, message, history)
+
+            responses.append(f"----------Evaluando respuesta---------\n {response.choices[0].message.content}\n")
+            responses.append(f"----------Retroalimentación----------\n {evaluation.feedback}\n")
+
+
+        responses.append(f"----------Respuesta final---------\n {response.choices[0].message.content}\n")
+
+        return responses
+    
+    responses.append(response.choices[0].message.content)
+
+    return responses
 
 class Evaluacion(BaseModel):
     isAcceptable: bool
@@ -90,10 +114,6 @@ def prompt_usuario_evaluador(response, message, history):
     userPrompt += "Por favor evalua la respuesta, respondiendo si es aceptable y tu retroalimentacion"
     return userPrompt
 
-gemini = OpenAI(
-    api_key= os.getenv("GEMINI_API_KEY"),
-    base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-)
 
 def evaluar (response, message, history) -> Evaluacion:
     messages = [
@@ -102,7 +122,7 @@ def evaluar (response, message, history) -> Evaluacion:
     ]
     
     evaluationResponse = gemini.chat.completions.create(
-        model="gemini-2.5-flash",
+        model= os.getenv("GEMINI_MODEL"),
         messages=messages,
         response_format={"type": "json_object"}
     )

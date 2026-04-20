@@ -1,5 +1,13 @@
 import gradio as gr
 
+def generateCheckbox(label, defaultValue, onChangeFunction):
+    checkbox = gr.Checkbox(label = label, value = defaultValue)
+
+    if onChangeFunction:
+        checkbox.change(fn = onChangeFunction, inputs = [checkbox], outputs = [])
+
+    return checkbox
+
 def generateMultilineTextInput(onUploadFunction, label):
     text_input = gr.Textbox(
         lines = 5,

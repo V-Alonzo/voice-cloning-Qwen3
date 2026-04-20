@@ -19,24 +19,55 @@ personName = ""
 personSummary = ""
 textHistory = []
 defaultTextToSynthesize = "Esto es lo que sucede cuando clonas una voz utilizando Inteligencia Artificial. Es sorprendente, ¿No te parece?"
+generateWithVoiceCloning = True
+reasoningActivated = False
 
 load_dotenv(dotenv_path=".env", override=True)
 
+def toggleVoiceCloning(value):
+    global generateWithVoiceCloning
+    generateWithVoiceCloning = value
+    return value
+
+def toggleReasoning(value):
+    global reasoningActivated
+    reasoningActivated = value
+    return value
+
+
 def processChatMessages(mensaje, historial):
     global textHistory
+    global reasoningActivated
 
-    response = chatGeneration(mensaje, textHistory)
+    responses = chatGeneration(mensaje, textHistory, reasoningActivated)
 
+    chatMessages = []
+
+    if(reasoningActivated):
+        chatMessages.append(ChatMessage(role="assistant", content="Iniciando Razonamiento..."))
+
+        for responseIndex in range(len(responses) - 1):
+            chatMessages.append(ChatMessage(role="assistant", content=responses[responseIndex]))
+
+        chatMessages.append(ChatMessage(role="assistant", content="Razonamiento Finalizado."))
+
+    audio_response = None
+    
     try:
-        audio_response = voiceClonning.performVoiceInference(response)
+        if generateWithVoiceCloning:
+            audio_response = voiceClonning.performVoiceInference(responses[-1])
     except Exception as e:
         print(f"Error during voice inference: {e}")
         audio_response = None
 
     if(audio_response is None):
-        return ChatMessage(role="assistant", content=response)
+        chatMessages.append(ChatMessage(role="assistant", content=responses[-1]))
+        return chatMessages
     
-    return [ChatMessage(role="assistant", content=response), ChatMessage(role="assistant", content=gr.Audio(value=audio_response))]
+    chatMessages.append(ChatMessage(role="assistant", content=responses[-1]))
+    chatMessages.append(ChatMessage(role="assistant", content=gr.Audio(value=audio_response)))
+    
+    return chatMessages
 
 def processName(name):
     global personName
@@ -134,13 +165,16 @@ def generateStep5():
     global pdfFile
     global personName
     global personSummary
+    global generateWithVoiceCloning
 
     with gr.Blocks() as step5:
         gr.Markdown("## Step 5: Chat with the Cloned Voice Agent")
         statusOutputChat = gr.Textbox(label = "Status", interactive = False)
         loadChatButton = gr.Button("Load Chat")
         loadChatButton.click(fn = lambda x: initialConfiguration(pdfFile, personSummary, personName), inputs = [], outputs = [statusOutputChat])
-        
+        toggleVoiceCloningCheckbox = inputsGenerator.generateCheckbox(label = "Generate with Voice Cloning", defaultValue = generateWithVoiceCloning, onChangeFunction = lambda x: toggleVoiceCloning(x))
+        toggleReasoningCheckbox = inputsGenerator.generateCheckbox(label = "Activate Reasoning", defaultValue = reasoningActivated, onChangeFunction = lambda x: toggleReasoning(x))
+
         gr.ChatInterface(processChatMessages)
 
     return step5
