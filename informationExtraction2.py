@@ -13,23 +13,10 @@ load_dotenv()
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
-with open("agencia.txt","r", encoding="utf-8") as f:
-    documento = f.read()
-    
-    
-textSplitter = RecursiveCharacterTextSplitter(
-    chunk_size = 500,
-    chunk_overlap = 50
-)
+documento = ""
+chunks = []
+rag_chain = None
 
-chunks = textSplitter.split_text(documento)
-
-vectorStore = FAISS.from_texts(chunks, embeddings)
-
-retriever = vectorStore.as_retriever(
-    search_type="similarity",
-    search_kwargs = {'k': 4}
-) 
 #Sustiuir Agencia Digital por la empresa en cuestión
 prompt = ChatPromptTemplate.from_template("""Eres el asistente virtual de Agencia Digital. Tu trabajo es respondeer las preguntas
 de los clientes ÚNICAMENTE usando la información proporcionada en el contextto.
@@ -52,35 +39,55 @@ Respuesta:""")
 def formatDocs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
-rag_chain = (
-    {"context": retriever | formatDocs, "question": RunnablePassthrough()}
-    | prompt
-    | llm
-    | StrOutputParser()
-)
 
-def respond(message, history):
-    response = rag_chain.invoke(message)
-    return response
+def getDefaultAgencyInformation():
+    try:
+        with open("agencia.txt", "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        print(f"No se pudo leer agencia.txt: {e}")
+        return ""
 
-demo = gr.ChatInterface(
-    fn = respond,
-    title="Agencia Digital AI",
-    description="Pregúntame sobre horarios, ubicación y más",
-    examples = [
-        "¿Cuál es el horario de atención?",
-        "¿Tienen opciones Automaticaciones?",
-        "¿Qué automatizaciones diseña?",
-        "¿Usas Python para automatizar?",
-        "Algún contacto para dudas"
-    ]
-)
 
-if __name__ == "__main__":
-    print (f"Documento cargado: {len(chunks)} fragmentos indexados")
-    demo.launch(
-        server_name ="0.0.0.0",
-        server_port= 7861,
-        theme ="soft",
-        share= True
+def loadAgencyConfiguration(agencyInformation):
+    global documento
+    global chunks
+    global rag_chain
+
+    documento = (agencyInformation or "").strip()
+
+    if not documento:
+        rag_chain = None
+        chunks = []
+        return "La información de agencia está vacía."
+
+    textSplitter = RecursiveCharacterTextSplitter(
+        chunk_size = 500,
+        chunk_overlap = 50
     )
+
+    chunks = textSplitter.split_text(documento)
+
+    vectorStore = FAISS.from_texts(chunks, embeddings)
+    retriever = vectorStore.as_retriever(
+        search_type="similarity",
+        search_kwargs = {'k': 4}
+    )
+
+    rag_chain = (
+        {"context": retriever | formatDocs, "question": RunnablePassthrough()}
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+
+    return f"Documento cargado: {len(chunks)} fragmentos indexados"
+
+
+def chatGeneration2(message, history=None):
+    global rag_chain
+
+    if rag_chain is None:
+        return "Primero carga la información de la agencia."
+
+    return rag_chain.invoke(message)

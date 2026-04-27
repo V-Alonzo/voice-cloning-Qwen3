@@ -4,6 +4,7 @@ import inputsGenerator
 import voiceClonning
 import os
 from informationExtraction import chatGeneration, initialConfiguration
+from informationExtraction2 import chatGeneration2, loadAgencyConfiguration, getDefaultAgencyInformation
 from dotenv import load_dotenv
 from gradio import ChatMessage
 
@@ -67,6 +68,25 @@ def processChatMessages(mensaje, historial):
     chatMessages.append(ChatMessage(role="assistant", content=responses[-1]))
     chatMessages.append(ChatMessage(role="assistant", content=gr.Audio(value=audio_response)))
     
+    return chatMessages
+
+
+def processAgencyChatMessages(mensaje, historial):
+    response = chatGeneration2(mensaje, historial)
+
+    chatMessages = [ChatMessage(role="assistant", content=response)]
+    audio_response = None
+
+    try:
+        if generateWithVoiceCloning:
+            audio_response = voiceClonning.performVoiceInference(response)
+    except Exception as e:
+        print(f"Error during voice inference: {e}")
+        audio_response = None
+
+    if audio_response is not None:
+        chatMessages.append(ChatMessage(role="assistant", content=gr.Audio(value=audio_response)))
+
     return chatMessages
 
 def processName(name):
@@ -180,11 +200,45 @@ def generateStep5():
     return step5
 
 
-steps = [generateStep1, generateStep2, generateStep3, generateStep4, generateStep5]
+def generateStep6():
+    global generateWithVoiceCloning
+
+    with gr.Blocks() as step6:
+        gr.Markdown("## Step 6: Chat with Agency Information")
+        agencyInfoInput = gr.Textbox(
+            lines = 12,
+            value = getDefaultAgencyInformation(),
+            label = "Agency Information",
+            placeholder = "Paste agency information here..."
+        )
+
+        statusOutputAgency = gr.Textbox(label = "Status", interactive = False)
+        loadAgencyButton = gr.Button("Load Agency Info")
+        loadAgencyButton.click(fn = loadAgencyConfiguration, inputs = [agencyInfoInput], outputs = [statusOutputAgency])
+
+        toggleVoiceCloningCheckbox = inputsGenerator.generateCheckbox(label = "Generate with Voice Cloning", defaultValue = generateWithVoiceCloning, onChangeFunction = lambda x: toggleVoiceCloning(x))
+
+        gr.ChatInterface(
+            fn = processAgencyChatMessages,
+            title="Agencia Digital AI",
+            description="Pregúntame sobre horarios, ubicación y más",
+            examples = [
+                "¿Cuál es el horario de atención?",
+                "¿Tienen opciones Automaticaciones?",
+                "¿Qué automatizaciones diseña?",
+                "¿Usas Python para automatizar?",
+                "Algún contacto para dudas"
+            ]
+        )
+
+    return step6
+
+
+steps = [generateStep1, generateStep2, generateStep3, generateStep4, generateStep5, generateStep6]
 
 
 renderedStep = 0
-with gr.Blocks() as demo:
+with gr.Blocks(theme = gr.themes.Base()) as demo:
     gr.Markdown("# Voice Cloning Activity")
     gr.Markdown("## Author: Víctor Alonzo Estévez Chávez")
     
