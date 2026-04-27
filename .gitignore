@@ -2,3 +2,4 @@ __pycache__/
 .gradio/
 .env
 synthesized_audio.wav
+ToolsResults/*.txt
